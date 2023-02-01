@@ -1107,9 +1107,9 @@ static void CB2_HandleStartBattle(void)
             s32 i;
             for (i = 0; i < 2 && (gLinkPlayers[i].version & 0xFF) == VERSION_EMERALD; i++);
 
-            //if (i == 2)
-            //   gBattleCommunication[MULTIUSE_STATE] = 16;
-            //else
+            if (i == 2)
+                gBattleCommunication[MULTIUSE_STATE] = 16;
+            else
                 gBattleCommunication[MULTIUSE_STATE] = 18;
         }
         else
@@ -1118,10 +1118,12 @@ static void CB2_HandleStartBattle(void)
         }
         break;
     case 16:
-        // Both players are using Emerald, send rng seed for recorded battle
+        u32 dummy;
+        dummy = Random32();
+        // Both players are using Emerald, send dummy RNG seed
         if (IsLinkTaskFinished())
         {
-            //SendBlock(BitmaskAllOtherLinkPlayers(), &gRecordedBattleRngSeed, sizeof(gRecordedBattleRngSeed));
+            SendBlock(BitmaskAllOtherLinkPlayers(), &dummy, sizeof(dummy));
             gBattleCommunication[MULTIUSE_STATE]++;
         }
         break;
@@ -1130,8 +1132,9 @@ static void CB2_HandleStartBattle(void)
         if ((GetBlockReceivedStatus() & 3) == 3)
         {
             ResetBlockReceivedFlags();
-            if (!(gBattleTypeFlags & BATTLE_TYPE_IS_MASTER))
-                //memcpy(&gRecordedBattleRngSeed, gBlockRecvBuffer[enemyMultiplayerId], sizeof(gRecordedBattleRngSeed));
+            // do nothing. recorded link battles do not work.
+            //if (!(gBattleTypeFlags & BATTLE_TYPE_IS_MASTER))
+            //    memcpy(&gRecordedBattleRngSeed, gBlockRecvBuffer[enemyMultiplayerId], sizeof(gRecordedBattleRngSeed));
             gBattleCommunication[MULTIUSE_STATE]++;
         }
         break;
@@ -1823,7 +1826,7 @@ static void CB2_HandleStartMultiBattle(void)
         {
             u32 *ptr = gBattleStruct->multiBuffer.battleVideo;
             ptr[0] = gBattleTypeFlags;
-            //ptr[1] = gRecordedBattleRngSeed; // UB: overwrites berry data
+            ptr[1] = Random32();; // UB: overwrites berry data
             SendBlock(BitmaskAllOtherLinkPlayers(), ptr, sizeof(gBattleStruct->multiBuffer.battleVideo));
             gBattleCommunication[MULTIUSE_STATE]++;
         }
@@ -1831,16 +1834,17 @@ static void CB2_HandleStartMultiBattle(void)
     case 9:
         if ((GetBlockReceivedStatus() & 0xF) == 0xF)
         {
+            /*
             ResetBlockReceivedFlags();
             for (var = 0; var < 4; var++)
             {
                 u32 blockValue = gBlockRecvBuffer[var][0];
                 if (blockValue & 4)
                 {
-                    //memcpy(&gRecordedBattleRngSeed, &gBlockRecvBuffer[var][2], sizeof(gRecordedBattleRngSeed));
+                    memcpy(&gRecordedBattleRngSeed, &gBlockRecvBuffer[var][2], sizeof(gRecordedBattleRngSeed));
                     break;
                 }
-            }
+            }*/
 
             gBattleCommunication[MULTIUSE_STATE]++;
         }
@@ -2299,13 +2303,15 @@ static void EndLinkBattleInSteps(void)
 
             if (!gSaveBlock2Ptr->frontier.disableRecordBattle && i == battlerCount)
             {
-                if (FlagGet(FLAG_SYS_FRONTIER_PASS))
+                // Battle recordings are broken if we are master, handle it.
+                if (gMain.anyLinkBattlerHasFrontierPass && (gBattleTypeFlags & BATTLE_TYPE_IS_MASTER) )
                 {
-                    // Ask player if they want to record the battle
+                    // Warn the player to warn players this battle can't be recorded
+                    // We can't stop other players from recording a battle.
                     FreeAllWindowBuffers();
                     SetMainCallback2(CB2_InitAskRecordBattle);
                 }
-                else if (!gMain.anyLinkBattlerHasFrontierPass)
+                else if (gReceivedRemoteLinkPlayers != 0)
                 {
                     // No players can record this battle, end
                     SetMainCallback2(gMain.savedCallback);
@@ -2505,53 +2511,11 @@ static void AskRecordBattle(void)
     case STATE_PRINT_YES_NO:
         if (!IsTextPrinterActive(B_WIN_MSG))
         {
-            HandleBattleWindow(YESNOBOX_X_Y, 0);
-            BattlePutTextOnWindow(gText_BattleYesNoChoice, B_WIN_YESNO);
-            gBattleCommunication[CURSOR_POSITION] = 1;
-            BattleCreateYesNoCursorAt(1);
             gBattleCommunication[MULTIUSE_STATE]++;
         }
         break;
     case STATE_HANDLE_YES_NO:
-        if (JOY_NEW(DPAD_UP))
-        {
-            if (gBattleCommunication[CURSOR_POSITION] != 0)
-            {
-                // Moved cursor onto Yes
-                PlaySE(SE_SELECT);
-                BattleDestroyYesNoCursorAt(gBattleCommunication[CURSOR_POSITION]);
-                gBattleCommunication[CURSOR_POSITION] = 0;
-                BattleCreateYesNoCursorAt(0);
-            }
-        }
-        else if (JOY_NEW(DPAD_DOWN))
-        {
-            if (gBattleCommunication[CURSOR_POSITION] == 0)
-            {
-                // Moved cursor onto No
-                PlaySE(SE_SELECT);
-                BattleDestroyYesNoCursorAt(gBattleCommunication[CURSOR_POSITION]);
-                gBattleCommunication[CURSOR_POSITION] = 1;
-                BattleCreateYesNoCursorAt(1);
-            }
-        }
-        else if (JOY_NEW(A_BUTTON))
-        {
-            PlaySE(SE_SELECT);
-            if (gBattleCommunication[CURSOR_POSITION] == 0)
-            {
-                // Selected Yes
-                HandleBattleWindow(YESNOBOX_X_Y, WINDOW_CLEAR);
-                gBattleCommunication[1] = MoveRecordedBattleToSaveData();
-                gBattleCommunication[MULTIUSE_STATE] = STATE_RECORD_YES;
-            }
-            else
-            {
-                // Selected No
-                gBattleCommunication[MULTIUSE_STATE]++;
-            }
-        }
-        else if (JOY_NEW(B_BUTTON))
+        if (JOY_NEW(A_BUTTON | B_BUTTON))
         {
             PlaySE(SE_SELECT);
             gBattleCommunication[MULTIUSE_STATE]++;
