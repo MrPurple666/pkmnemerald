@@ -1,3 +1,4 @@
+
 #include "global.h"
 #include "main.h"
 #include "text.h"
@@ -416,7 +417,7 @@ static bool32 HandleMysteryGiftOrEReaderSetup(s32 isEReader)
         SetGpuReg(REG_OFFSET_BLDCNT, 0);
         SetGpuReg(REG_OFFSET_BLDALPHA, 0);
         SetGpuReg(REG_OFFSET_BLDY, 0);
-        SeedRngIfNeeded();
+//        SeedRngIfNeeded();
         gMain.state++;
         break;
     case 1:
