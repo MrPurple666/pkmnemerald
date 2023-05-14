@@ -95,3 +95,14 @@ void StartSeedTimer(void)
     REG_TM1CNT_H = 0x80;
     REG_TM2CNT_H = 0x84;
 }
+
+// NEW
+u16 RandRange(u16 min, u16 max)
+{    
+    if (min == max)
+        return min;
+    
+    max++;   // make inclusive
+    return (Random() % (max - min)) + min;
+}
+

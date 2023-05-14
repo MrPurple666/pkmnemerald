@@ -145,5 +145,6 @@ RANDOM_NONCONST u32 RandomModTarget32(const u32 modulo, const u32 target)
 #define RandomPercentageGood() (RandomRangeGood(100))
 
 #undef RANDOM_NONCONST
+u16 RandRange(u16 min, u16 max);
 
 #endif // GUARD_RANDOM_H
